@@ -70,6 +70,8 @@ const (
 	// DefaultMaxIdleConns is the default maximum number of idle connections
 	// kept for any single address.
 	DefaultMaxIdleConns = 2
+	
+	DefaultMaxconns = 2
 )
 
 const buffered = 8 // arbitrary buffered channel size, for readability
@@ -142,6 +144,8 @@ type Client struct {
 	// Consider your expected traffic rates and latency carefully. This should
 	// be set to a number higher than your peak parallel requests.
 	MaxIdleConns int
+	
+	MaxConns int
 
 	selector ServerSelector
 
@@ -240,6 +244,13 @@ func (c *Client) maxIdleConns() int {
 		return c.MaxIdleConns
 	}
 	return DefaultMaxIdleConns
+}
+
+func (c *Client) maxConns() int {
+	if c.MaxConns > 0 {
+		return c.MaxConns
+	}
+	return DefaultMaxconns
 }
 
 // ConnectTimeoutError is the error type used when it takes
