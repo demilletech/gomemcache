@@ -70,7 +70,7 @@ const (
 	// DefaultMaxIdleConns is the default maximum number of idle connections
 	// kept for any single address.
 	DefaultMaxIdleConns = 2
-	
+
 	DefaultMaxconns = 2
 )
 
@@ -144,13 +144,15 @@ type Client struct {
 	// Consider your expected traffic rates and latency carefully. This should
 	// be set to a number higher than your peak parallel requests.
 	MaxIdleConns int
-	
+
 	MaxConns int
 
 	selector ServerSelector
 
 	lk       sync.Mutex
 	freeconn map[string][]*conn
+	getlk    sync.Mutex
+	conns    int
 }
 
 // Item is an item to be got or stored in a memcached server.
@@ -283,20 +285,30 @@ func (c *Client) dial(addr net.Addr) (net.Conn, error) {
 }
 
 func (c *Client) getConn(addr net.Addr) (*conn, error) {
+	c.getlk.Lock()
+	defer c.getlk.Unlock()
 	cn, ok := c.getFreeConn(addr)
 	if ok {
 		cn.extendDeadline()
 		return cn, nil
 	}
-	nc, err := c.dial(addr)
-	if err != nil {
-		return nil, err
-	}
-	cn = &conn{
-		nc:   nc,
-		addr: addr,
-		rw:   bufio.NewReadWriter(bufio.NewReader(nc), bufio.NewWriter(nc)),
-		c:    c,
+	if c.conns >= c.maxConns() {
+		for !ok {
+			time.Sleep(time.Millisecond * 1)
+			cn, ok = c.getFreeConn(addr)
+		}
+	} else {
+		nc, err := c.dial(addr)
+		if err != nil {
+			return nil, err
+		}
+		cn = &conn{
+			nc:   nc,
+			addr: addr,
+			rw:   bufio.NewReadWriter(bufio.NewReader(nc), bufio.NewWriter(nc)),
+			c:    c,
+		}
+		c.conns++
 	}
 	cn.extendDeadline()
 	return cn, nil
